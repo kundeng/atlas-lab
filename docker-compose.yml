@@ -1,0 +1,73 @@
+# Atlas 2.5.0 lab from the prebuilt public images at ghcr.io/kundeng/atlas-lab (amd64 and arm64).
+# Same services and hostnames as Apache Atlas's dev-support/atlas-docker with the PostgreSQL backend,
+# minus Kafka: the lab sends no notifications, and Atlas runs without it.
+# Data lives in four named volumes: empty on first start, or restored from a snapshot (see README.md).
+name: atlas-lab
+
+services:
+  atlas-db:
+    image: ${ATLAS_REGISTRY:-ghcr.io/kundeng/atlas-lab}/atlas-db:2.5.0
+    hostname: atlas-db.example.com
+    networks:
+      atlas:
+        aliases: [atlas-db.example.com]
+    volumes:
+      - db:/var/lib/postgresql/data
+    healthcheck:
+      test: 'su -c "pg_isready -q" postgres'
+      interval: 30s
+      timeout: 10s
+      retries: 30
+      start_period: 40s
+
+  atlas-zk:
+    image: ${ATLAS_REGISTRY:-ghcr.io/kundeng/atlas-lab}/atlas-zk:2.5.0
+    hostname: atlas-zk.example.com
+    networks:
+      atlas:
+        aliases: [atlas-zk.example.com]
+    volumes:
+      - zk-data:/data
+      - zk-datalog:/datalog
+
+  atlas-solr:
+    image: ${ATLAS_REGISTRY:-ghcr.io/kundeng/atlas-lab}/atlas-solr:2.5.0
+    hostname: atlas-solr.example.com
+    networks:
+      atlas:
+        aliases: [atlas-solr.example.com]
+    volumes:
+      - solr:/var/solr
+
+  atlas:
+    image: ${ATLAS_REGISTRY:-ghcr.io/kundeng/atlas-lab}/atlas:2.5.0
+    hostname: atlas.example.com
+    stdin_open: true
+    tty: true
+    networks:
+      atlas:
+        aliases: [atlas.example.com]
+    ports:
+      - "127.0.0.1:${ATLAS_PORT:-21000}:21000"
+    depends_on:
+      atlas-db:
+        condition: service_healthy
+      atlas-solr:
+        condition: service_started
+      atlas-zk:
+        condition: service_started
+    environment:
+      - ATLAS_BACKEND=postgres
+      - ATLAS_SERVER_JAVA_VERSION=8
+      - ATLAS_VERSION=2.5.0
+    command:
+      - /home/atlas/scripts/atlas.sh
+
+volumes:
+  db:
+  solr:
+  zk-data:
+  zk-datalog:
+
+networks:
+  atlas:
